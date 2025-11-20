@@ -4,18 +4,28 @@ An open-source web application for early-stage injection molding feasibility ass
 
 ## Features
 
-- **STL File Upload**: Automatic geometry analysis (volume, projected area, thickness)
+- **CAD File Support**:
+  - STL file upload with automatic geometry analysis
+  - **STEP file support** (.step, .stp) for native CAD formats
+  - Manual dimension input when no CAD is available (labeled "Estimated - No CAD")
 - **Material Database**: 20+ materials with manufacturer-specific grades (SABIC, LG Chem, BASF, Covestro, DuPont)
 - **Core Calculations**:
-  - Clamp tonnage estimation
+  - Clamp tonnage estimation with formula citations
   - Fill time and injection pressure
   - Cycle time breakdown
-  - Gate and runner sizing
-- **Machine Recommendations**: Matches requirements to standard machine tonnages
+  - Gate and runner sizing recommendations
+- **Visualizations**:
+  - 3D model viewer with Three.js
+  - **Flow pattern visualization** (SVG-based flow front approximation)
+  - **Thickness distribution chart** (histogram)
+- **Machine Recommendations**: Matches requirements to standard machine tonnages (80T-1300T)
 - **Dual Views**:
   - Designer View: Full technical details with formulas
   - Customer View: Simplified summary with plain language
-- **Report Generation**: PDF reports with all calculations and citations
+- **Report Generation**:
+  - **Independent reports** for designer (technical) and customer (summary)
+  - PDF export with all calculations and formula citations
+  - Risk warnings in both technical and plain language
 
 ## Quick Start
 

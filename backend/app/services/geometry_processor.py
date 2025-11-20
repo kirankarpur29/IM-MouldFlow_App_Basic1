@@ -1,11 +1,12 @@
 """
-Geometry processing service for STL files.
-Calculates volume, projected area, thickness estimates, etc.
+Geometry processing service for STL and STEP files.
+Calculates volume, projected area, thickness estimates, flow visualization.
 """
 import numpy as np
 from stl import mesh
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, List
 import io
+import math
 
 def process_stl_file(file_content: bytes) -> Dict[str, Any]:
     """
@@ -44,7 +45,85 @@ def process_stl_file(file_content: bytes) -> Dict[str, Any]:
         "max_thickness": round(thickness['max'], 2),
         "min_thickness": round(thickness['min'], 2),
         "avg_thickness": round(thickness['avg'], 2),
+        "thickness_distribution": thickness.get('distribution', []),
     }
+
+
+def process_step_file(file_content: bytes) -> Dict[str, Any]:
+    """
+    Process STEP file and extract geometric properties.
+
+    Uses cadquery/OpenCASCADE for STEP parsing.
+    """
+    try:
+        import cadquery as cq
+        from OCP.BRepGProp import BRepGProp
+        from OCP.GProp import GProp_GProps
+        from OCP.Bnd import Bnd_Box
+        from OCP.BRepBndLib import BRepBndLib_AddClose
+
+        # Save to temp file for cadquery (it needs file path)
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(suffix='.step', delete=False) as f:
+            f.write(file_content)
+            temp_path = f.name
+
+        try:
+            # Import STEP file
+            result = cq.importers.importStep(temp_path)
+            shape = result.val().wrapped
+
+            # Calculate volume
+            props = GProp_GProps()
+            BRepGProp.VolumeProperties_s(shape, props)
+            volume_mm3 = props.Mass()
+            volume_cm3 = volume_mm3 / 1000
+
+            # Calculate surface area
+            surf_props = GProp_GProps()
+            BRepGProp.SurfaceProperties_s(shape, surf_props)
+            surface_area_mm2 = surf_props.Mass()
+            surface_area_cm2 = surface_area_mm2 / 100
+
+            # Get bounding box
+            bbox_obj = Bnd_Box()
+            BRepBndLib_AddClose(shape, bbox_obj)
+            xmin, ymin, zmin, xmax, ymax, zmax = bbox_obj.Get()
+
+            bbox = {
+                'x': xmax - xmin,
+                'y': ymax - ymin,
+                'z': zmax - zmin,
+            }
+
+            # Projected area (XY plane)
+            projected_area_mm2 = bbox['x'] * bbox['y']
+            projected_area_cm2 = projected_area_mm2 / 100
+
+            # Estimate thickness
+            thickness = estimate_thickness(volume_mm3, surface_area_mm2, bbox)
+
+            return {
+                "volume_cm3": round(volume_cm3, 3),
+                "surface_area_cm2": round(surface_area_cm2, 2),
+                "projected_area_cm2": round(projected_area_cm2, 2),
+                "bbox_x": round(bbox['x'], 2),
+                "bbox_y": round(bbox['y'], 2),
+                "bbox_z": round(bbox['z'], 2),
+                "max_thickness": round(thickness['max'], 2),
+                "min_thickness": round(thickness['min'], 2),
+                "avg_thickness": round(thickness['avg'], 2),
+                "thickness_distribution": thickness.get('distribution', []),
+            }
+        finally:
+            os.unlink(temp_path)
+
+    except ImportError:
+        raise RuntimeError("STEP file support requires cadquery. Install with: pip install cadquery")
+    except Exception as e:
+        raise RuntimeError(f"Failed to process STEP file: {str(e)}")
 
 
 def calculate_volume(stl_mesh) -> float:
@@ -93,36 +172,28 @@ def calculate_projected_area(stl_mesh, axis: str = 'z') -> float:
     """
     Calculate projected area along specified axis.
     Uses simplified bounding box method for speed.
-
-    For more accurate results, would need 2D projection and polygon union.
     """
     bbox = get_bounding_box(stl_mesh)
 
     if axis == 'z':
-        # Projected area in XY plane
         return bbox['x'] * bbox['y']
     elif axis == 'y':
         return bbox['x'] * bbox['z']
-    else:  # axis == 'x'
+    else:
         return bbox['y'] * bbox['z']
 
 
-def estimate_thickness(volume_mm3: float, surface_area_mm2: float, bbox: Dict) -> Dict[str, float]:
+def estimate_thickness(volume_mm3: float, surface_area_mm2: float, bbox: Dict) -> Dict[str, Any]:
     """
     Estimate wall thickness from geometry.
-
-    Uses volume/surface area ratio as average thickness estimate.
-    Min/max are estimated from bounding box ratios.
     """
     # Average thickness from V/A ratio
-    # For a thin shell: V ≈ A × t, so t ≈ V/A
     if surface_area_mm2 > 0:
         avg_thickness = 2 * volume_mm3 / surface_area_mm2
     else:
-        avg_thickness = 2.0  # Default
+        avg_thickness = 2.0
 
-    # Estimate min/max based on typical injection molding ratios
-    # These are heuristics - real thickness analysis needs ray casting
+    # Estimate min/max based on typical ratios
     min_thickness = avg_thickness * 0.6
     max_thickness = avg_thickness * 1.8
 
@@ -131,11 +202,53 @@ def estimate_thickness(volume_mm3: float, surface_area_mm2: float, bbox: Dict) -
     max_thickness = max(min_thickness * 1.2, min(max_thickness, 15.0))
     avg_thickness = max(min_thickness, min(avg_thickness, max_thickness))
 
+    # Generate thickness distribution (simplified histogram)
+    distribution = generate_thickness_distribution(min_thickness, avg_thickness, max_thickness)
+
     return {
         'min': min_thickness,
         'max': max_thickness,
-        'avg': avg_thickness
+        'avg': avg_thickness,
+        'distribution': distribution
     }
+
+
+def generate_thickness_distribution(min_t: float, avg_t: float, max_t: float) -> List[Dict]:
+    """
+    Generate a simplified thickness distribution histogram.
+
+    In a real implementation, this would come from ray casting analysis.
+    Here we use a normal distribution approximation.
+    """
+    # Create bins
+    num_bins = 8
+    bin_width = (max_t - min_t) / num_bins
+
+    # Generate normal distribution centered on average
+    std_dev = (max_t - min_t) / 4
+
+    distribution = []
+    for i in range(num_bins):
+        bin_start = min_t + i * bin_width
+        bin_end = bin_start + bin_width
+        bin_center = (bin_start + bin_end) / 2
+
+        # Normal distribution probability
+        prob = math.exp(-0.5 * ((bin_center - avg_t) / std_dev) ** 2)
+
+        distribution.append({
+            "range_start": round(bin_start, 2),
+            "range_end": round(bin_end, 2),
+            "percentage": round(prob * 100 / num_bins * 2, 1)  # Normalize
+        })
+
+    # Normalize to sum to 100
+    total = sum(d["percentage"] for d in distribution)
+    if total > 0:
+        for d in distribution:
+            d["percentage"] = round(d["percentage"] * 100 / total, 1)
+
+    return distribution
 
 
 def process_manual_input(
@@ -172,6 +285,9 @@ def process_manual_input(
     min_thickness = avg_thickness * 0.8
     max_thickness = avg_thickness * 1.5
 
+    # Generate distribution
+    distribution = generate_thickness_distribution(min_thickness, avg_thickness, max_thickness)
+
     return {
         "volume_cm3": round(volume_cm3, 3),
         "surface_area_cm2": round(surface_area_cm2, 2),
@@ -182,5 +298,151 @@ def process_manual_input(
         "max_thickness": round(max_thickness, 2),
         "min_thickness": round(min_thickness, 2),
         "avg_thickness": round(avg_thickness, 2),
+        "thickness_distribution": distribution,
+        "is_manual": True,
         "note": "Estimated from manual input - No CAD"
     }
+
+
+def generate_flow_visualization(
+    bbox_x: float,
+    bbox_y: float,
+    gate_x: float = None,
+    gate_y: float = None,
+    num_contours: int = 8
+) -> str:
+    """
+    Generate SVG visualization of approximate flow fronts.
+
+    Uses radial distance from gate as simplified flow model.
+    Returns SVG string.
+    """
+    # Default gate position to center
+    if gate_x is None:
+        gate_x = bbox_x / 2
+    if gate_y is None:
+        gate_y = bbox_y / 2
+
+    # SVG dimensions (scale to fit)
+    svg_width = 300
+    svg_height = 300
+    padding = 20
+
+    # Scale factors
+    scale_x = (svg_width - 2 * padding) / bbox_x
+    scale_y = (svg_height - 2 * padding) / bbox_y
+    scale = min(scale_x, scale_y)
+
+    # Offset to center
+    offset_x = padding + (svg_width - 2 * padding - bbox_x * scale) / 2
+    offset_y = padding + (svg_height - 2 * padding - bbox_y * scale) / 2
+
+    # Gate position in SVG coordinates
+    gate_svg_x = offset_x + gate_x * scale
+    gate_svg_y = offset_y + gate_y * scale
+
+    # Maximum flow distance
+    max_dist = math.sqrt(bbox_x**2 + bbox_y**2)
+
+    # Generate SVG
+    svg_parts = [
+        f'<svg width="{svg_width}" height="{svg_height}" xmlns="http://www.w3.org/2000/svg">',
+        # Background
+        f'<rect width="{svg_width}" height="{svg_height}" fill="#f8fafc"/>',
+        # Part outline
+        f'<rect x="{offset_x}" y="{offset_y}" width="{bbox_x * scale}" height="{bbox_y * scale}" '
+        f'fill="none" stroke="#334155" stroke-width="2"/>',
+    ]
+
+    # Flow contours (colored rings from gate)
+    colors = [
+        "#22c55e",  # Green - early fill
+        "#84cc16",
+        "#eab308",
+        "#f97316",
+        "#ef4444",  # Red - late fill
+        "#dc2626",
+        "#b91c1c",
+        "#991b1b",
+    ]
+
+    for i in range(num_contours, 0, -1):
+        radius = (i / num_contours) * max_dist * scale * 0.5
+        color = colors[min(i - 1, len(colors) - 1)]
+        opacity = 0.3 + (i / num_contours) * 0.4
+
+        svg_parts.append(
+            f'<circle cx="{gate_svg_x}" cy="{gate_svg_y}" r="{radius}" '
+            f'fill="{color}" fill-opacity="{opacity}" stroke="none"/>'
+        )
+
+    # Gate marker
+    svg_parts.append(
+        f'<circle cx="{gate_svg_x}" cy="{gate_svg_y}" r="6" fill="#1e40af" stroke="#fff" stroke-width="2"/>'
+    )
+
+    # Labels
+    svg_parts.append(
+        f'<text x="{svg_width/2}" y="{svg_height - 5}" text-anchor="middle" '
+        f'font-size="10" fill="#64748b">Approximate Flow Pattern (Green=Early, Red=Late)</text>'
+    )
+
+    svg_parts.append('</svg>')
+
+    return '\n'.join(svg_parts)
+
+
+def generate_risk_zones(
+    bbox_x: float,
+    bbox_y: float,
+    gate_x: float = None,
+    gate_y: float = None,
+    avg_thickness: float = 2.5,
+    material_max_ratio: float = 150
+) -> List[Dict]:
+    """
+    Identify potential risk zones based on flow distance.
+
+    Returns list of risk zone coordinates and severity.
+    """
+    if gate_x is None:
+        gate_x = bbox_x / 2
+    if gate_y is None:
+        gate_y = bbox_y / 2
+
+    risk_zones = []
+
+    # Check corners as potential problem areas
+    corners = [
+        (0, 0, "bottom-left"),
+        (bbox_x, 0, "bottom-right"),
+        (0, bbox_y, "top-left"),
+        (bbox_x, bbox_y, "top-right")
+    ]
+
+    max_safe_distance = avg_thickness * material_max_ratio * 0.7
+    max_warning_distance = avg_thickness * material_max_ratio * 0.9
+
+    for x, y, name in corners:
+        distance = math.sqrt((x - gate_x)**2 + (y - gate_y)**2)
+        flow_ratio = distance / avg_thickness
+
+        if distance > max_warning_distance:
+            severity = "high"
+        elif distance > max_safe_distance:
+            severity = "medium"
+        else:
+            severity = "low"
+
+        if severity != "low":
+            risk_zones.append({
+                "location": name,
+                "x": x,
+                "y": y,
+                "distance_mm": round(distance, 1),
+                "flow_ratio": round(flow_ratio, 0),
+                "severity": severity,
+                "message": f"Flow distance {distance:.0f}mm from gate (L/t={flow_ratio:.0f})"
+            })
+
+    return risk_zones

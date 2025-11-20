@@ -12,8 +12,9 @@ export default function FileUpload({ projectId, onUploaded }: FileUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.stl')) {
-      alert('Please upload an STL file')
+    const filename = file.name.toLowerCase()
+    if (!filename.endsWith('.stl') && !filename.endsWith('.step') && !filename.endsWith('.stp')) {
+      alert('Please upload an STL or STEP file')
       return
     }
 
@@ -69,7 +70,7 @@ export default function FileUpload({ projectId, onUploaded }: FileUploadProps) {
         <>
           <div className="text-4xl mb-3">📁</div>
           <p className="text-gray-700 mb-2">
-            Drag and drop STL file here
+            Drag and drop CAD file here
           </p>
           <p className="text-gray-500 text-sm mb-4">or</p>
           <button
@@ -81,12 +82,12 @@ export default function FileUpload({ projectId, onUploaded }: FileUploadProps) {
           <input
             ref={inputRef}
             type="file"
-            accept=".stl"
+            accept=".stl,.step,.stp"
             onChange={handleChange}
             className="hidden"
           />
           <p className="text-xs text-gray-400 mt-4">
-            Supported: STL files up to 50MB
+            Supported: STL (.stl) and STEP (.step, .stp) files up to 50MB
           </p>
         </>
       )}

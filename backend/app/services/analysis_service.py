@@ -170,6 +170,8 @@ async def run_analysis(
     # Return formatted result
     return {
         "id": analysis.id,
+        "part_id": part_id,
+        "material_id": material_id,
         "cavity_count": cavity_count,
         "gate_type": gate_type,
         "gate_diameter": gate_diameter,

@@ -1,3 +1,5 @@
+import FlowVisualization from './FlowVisualization'
+
 interface ResultsPanelProps {
   result: any
   viewMode: 'designer' | 'customer'
@@ -101,6 +103,14 @@ export default function ResultsPanel({ result, viewMode, onGenerateReport }: Res
             </div>
           </div>
         </>
+      )}
+
+      {/* Flow Visualization */}
+      {result.part_id && (
+        <div className="bg-white rounded-lg shadow-sm p-4">
+          <h3 className="font-semibold mb-3">Flow Pattern</h3>
+          <FlowVisualization partId={result.part_id} />
+        </div>
       )}
 
       {/* Warnings */}
