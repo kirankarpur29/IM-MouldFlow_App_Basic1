@@ -21,26 +21,15 @@ export default function ManualInput({ projectId, onCreated }: ManualInputProps) 
     setLoading(true)
 
     try {
-      const response = await api.post('/api/v1/parts/manual', null, {
-        params: {
-          project_id: projectId,
-          name: formData.name || 'Manual Part'
-        },
-        data: {
+      const result = await api.post(
+        `/api/v1/parts/manual?project_id=${projectId}&name=${encodeURIComponent(formData.name || 'Manual Part')}`,
+        {
           length: parseFloat(formData.length),
           width: parseFloat(formData.width),
           height: parseFloat(formData.height),
           avg_thickness: parseFloat(formData.avg_thickness)
         }
-      })
-
-      // Actually send as JSON body
-      const result = await api.post(`/api/v1/parts/manual?project_id=${projectId}&name=${encodeURIComponent(formData.name || 'Manual Part')}`, {
-        length: parseFloat(formData.length),
-        width: parseFloat(formData.width),
-        height: parseFloat(formData.height),
-        avg_thickness: parseFloat(formData.avg_thickness)
-      })
+      )
 
       onCreated(result.data)
     } catch (error) {
