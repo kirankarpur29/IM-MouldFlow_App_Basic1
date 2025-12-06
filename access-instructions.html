@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MouldFlow App - Access Instructions</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #2563eb; }
+        .url-box {
+            background: #eff6ff;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+            border-left: 4px solid #2563eb;
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover { background: #1d4ed8; }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .success { background: #d1fae5; color: #065f46; }
+        .warning { background: #fef3c7; color: #92400e; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🎯 MouldFlow Analysis App</h1>
+
+        <div class="status success">
+            ✅ Servers are running successfully!
+        </div>
+
+        <h2>Try These Access Methods:</h2>
+
+        <div class="url-box">
+            <strong>Method 1:</strong> <a href="http://localhost:5173" target="_blank">http://localhost:5173</a>
+            <button onclick="window.open('http://localhost:5173', '_blank')">Open App</button>
+        </div>
+
+        <div class="url-box">
+            <strong>Method 2:</strong> <a href="http://127.0.0.1:5173" target="_blank">http://127.0.0.1:5173</a>
+            <button onclick="window.open('http://127.0.0.1:5173', '_blank')">Open App</button>
+        </div>
+
+        <div class="status warning">
+            ⚠️ If the links above don't work, you need to set up port forwarding.
+        </div>
+
+        <h2>📱 What Interface Are You Using?</h2>
+        <p>Look for one of these in your current interface:</p>
+        <ul>
+            <li><strong>PORTS</strong> tab or panel (bottom or side of screen)</li>
+            <li><strong>PREVIEW</strong> or <strong>OPEN BROWSER</strong> button</li>
+            <li><strong>PORT FORWARDING</strong> settings</li>
+            <li>A popup notification about "Port 5173"</li>
+        </ul>
+
+        <h2>✅ Server Status:</h2>
+        <ul>
+            <li>Frontend: Running on port <strong>5173</strong></li>
+            <li>Backend API: Running on port <strong>5000</strong></li>
+            <li>Database: Loaded with 20 materials + 10 machines</li>
+        </ul>
+
+        <h2>🔧 Need Help?</h2>
+        <p>Tell Claude which tool you're using:</p>
+        <ul>
+            <li>VS Code</li>
+            <li>Codespaces</li>
+            <li>Replit</li>
+            <li>Other cloud IDE</li>
+        </ul>
+    </div>
+
+    <script>
+        // Test if app is accessible
+        fetch('http://localhost:5173')
+            .then(response => {
+                if (response.ok) {
+                    alert('✅ App is accessible! Clicking the button will open it.');
+                }
+            })
+            .catch(error => {
+                console.log('App not directly accessible, need port forwarding');
+            });
+    </script>
+</body>
+</html>
