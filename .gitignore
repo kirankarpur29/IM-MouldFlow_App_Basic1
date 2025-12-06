@@ -41,3 +41,7 @@ Thumbs.db
 
 # Docker
 .docker/
+tunnel-url.txt
+PUBLIC_URL.txt
+create-tunnel.js
+tunnel-output.log
