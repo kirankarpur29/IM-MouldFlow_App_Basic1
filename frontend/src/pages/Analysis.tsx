@@ -7,7 +7,6 @@ import ManualInput from '../components/inputs/ManualInput'
 import MaterialSelect from '../components/inputs/MaterialSelect'
 import AnalysisConfig from '../components/inputs/AnalysisConfig'
 import ResultsPanel from '../components/results/ResultsPanel'
-import FlowVisualization from '../components/results/FlowVisualization'
 import ThicknessChart from '../components/results/ThicknessChart'
 
 interface Part {
