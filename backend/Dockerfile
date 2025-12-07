@@ -9,11 +9,9 @@ RUN apt-get update && apt-get install -y \
     libgdk-pixbuf2.0-0 \
     libffi-dev \
     shared-mime-info \
-    libgl1-mesa-glx \
-    libglu1-mesa \
-    libxmu6 \
-    libxi6 \
     && rm -rf /var/lib/apt/lists/*
+# Note: Removed OpenGL dependencies (libgl1-mesa-glx, libglu1-mesa, libxmu6, libxi6)
+# We no longer use CadQuery for STEP files - using lightweight text parsing instead
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

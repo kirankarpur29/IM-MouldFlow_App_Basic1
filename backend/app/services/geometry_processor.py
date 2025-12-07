@@ -53,24 +53,27 @@ def process_step_file(file_content: bytes) -> Dict[str, Any]:
     """
     Process STEP file and extract geometric properties.
 
-    Uses multiple fallback strategies for robustness.
+    Primary method: Lightweight text parsing (works on all platforms).
+    Fallback method: CadQuery (only if installed - heavy dependencies).
     """
-    # Try method 1: Full cadquery parsing
+    # Try method 1: Lightweight text parsing (PRIMARY - works everywhere)
     try:
-        return _process_step_with_cadquery(file_content)
-    except Exception as cq_error:
-        print(f"CadQuery method failed: {str(cq_error)}")
+        result = _process_step_simple_parser(file_content)
+        result["note"] = "Parsed using lightweight STEP text parser"
+        return result
+    except Exception as text_error:
+        print(f"Text parsing failed: {str(text_error)}")
 
-        # Try method 2: Simple STEP text parsing fallback
+        # Try method 2: Full cadquery parsing (FALLBACK - only if installed)
         try:
-            return _process_step_simple_fallback(file_content)
-        except Exception as fallback_error:
+            return _process_step_with_cadquery(file_content)
+        except Exception as cq_error:
             # If both fail, raise a detailed error
             raise RuntimeError(
                 f"STEP file processing failed. "
-                f"CadQuery error: {str(cq_error)[:100]}. "
-                f"Fallback error: {str(fallback_error)[:100]}. "
-                f"Please try converting to STL format or use manual input."
+                f"Text parser error: {str(text_error)[:100]}. "
+                f"CadQuery not available or failed: {str(cq_error)[:50]}. "
+                f"Try converting to STL or use manual input instead."
             )
 
 
@@ -163,7 +166,7 @@ def _process_step_with_cadquery(file_content: bytes) -> Dict[str, Any]:
         raise RuntimeError(f"CadQuery processing failed: {str(e)}")
 
 
-def _process_step_simple_fallback(file_content: bytes) -> Dict[str, Any]:
+def _process_step_simple_parser(file_content: bytes) -> Dict[str, Any]:
     """
     Simple STEP file parsing fallback.
     Extracts basic geometry from STEP text format.
