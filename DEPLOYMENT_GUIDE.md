@@ -21,11 +21,23 @@ Render offers FREE hosting for full-stack apps!
 2. **Sign up** with your GitHub account
 3. **Click "New +"** → Select **"Blueprint"**
 4. **Connect your repository:** `IM-MouldFlow_App_Basic1`
-5. Render will **auto-detect** and deploy both frontend & backend
-6. **Wait 5-10 minutes** for deployment
-7. **Get your live URL!** (like `https://mouldflow-app.onrender.com`)
+5. **Select branch:** `claude/injection-molding-software-plan-01SKrwjMDRRVgUAnqj4kSyUK`
+6. Render will **auto-detect** the `render.yaml` file and deploy:
+   - Backend service: `mouldflow-backend`
+   - Frontend service: `mouldflow-frontend`
+7. **Wait 10-15 minutes** for deployment
+8. **After deployment completes:**
+   - Click on `mouldflow-backend` service
+   - Copy the URL (like `https://mouldflow-backend.onrender.com`)
+   - Click on `mouldflow-frontend` service
+   - Go to "Environment" tab
+   - Add environment variable:
+     - Key: `VITE_API_URL`
+     - Value: `https://mouldflow-backend.onrender.com` (paste the backend URL)
+   - Click "Save Changes" (this will redeploy frontend)
+9. **Get your live URL!** Click on the frontend service URL
 
-**That's it!** ✅
+**Your app is now live!** ✅
 
 ---
 
