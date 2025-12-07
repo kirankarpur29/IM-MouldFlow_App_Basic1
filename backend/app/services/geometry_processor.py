@@ -53,32 +53,64 @@ def process_step_file(file_content: bytes) -> Dict[str, Any]:
     """
     Process STEP file and extract geometric properties.
 
-    Uses cadquery/OpenCASCADE for STEP parsing.
+    Uses multiple fallback strategies for robustness.
+    """
+    # Try method 1: Full cadquery parsing
+    try:
+        return _process_step_with_cadquery(file_content)
+    except Exception as cq_error:
+        print(f"CadQuery method failed: {str(cq_error)}")
+
+        # Try method 2: Simple STEP text parsing fallback
+        try:
+            return _process_step_simple_fallback(file_content)
+        except Exception as fallback_error:
+            # If both fail, raise a detailed error
+            raise RuntimeError(
+                f"STEP file processing failed. "
+                f"CadQuery error: {str(cq_error)[:100]}. "
+                f"Fallback error: {str(fallback_error)[:100]}. "
+                f"Please try converting to STL format or use manual input."
+            )
+
+
+def _process_step_with_cadquery(file_content: bytes) -> Dict[str, Any]:
+    """
+    Full STEP processing with cadquery (requires OpenCASCADE).
     """
     try:
         import cadquery as cq
         from OCP.BRepGProp import BRepGProp
         from OCP.GProp import GProp_GProps
         from OCP.Bnd import Bnd_Box
-        from OCP.BRepBndLib import BRepBndLib_AddClose
+        from OCP.BRepBndLib import BRepBndLib
 
-        # Save to temp file for cadquery (it needs file path)
+        # Use in-memory processing instead of temp files
         import tempfile
         import os
 
-        with tempfile.NamedTemporaryFile(suffix='.step', delete=False) as f:
-            f.write(file_content)
-            temp_path = f.name
-
+        # Create temp file with proper cleanup
+        fd, temp_path = tempfile.mkstemp(suffix='.step', text=False)
         try:
+            os.write(fd, file_content)
+            os.close(fd)
+
             # Import STEP file
             result = cq.importers.importStep(temp_path)
+
+            if result is None or result.val() is None:
+                raise ValueError("STEP import returned None - file may be corrupted")
+
             shape = result.val().wrapped
 
             # Calculate volume
             props = GProp_GProps()
             BRepGProp.VolumeProperties_s(shape, props)
             volume_mm3 = props.Mass()
+
+            if volume_mm3 <= 0:
+                raise ValueError(f"Invalid volume calculated: {volume_mm3}")
+
             volume_cm3 = volume_mm3 / 1000
 
             # Calculate surface area
@@ -89,13 +121,13 @@ def process_step_file(file_content: bytes) -> Dict[str, Any]:
 
             # Get bounding box
             bbox_obj = Bnd_Box()
-            BRepBndLib_AddClose(shape, bbox_obj)
+            BRepBndLib.Add_s(shape, bbox_obj)
             xmin, ymin, zmin, xmax, ymax, zmax = bbox_obj.Get()
 
             bbox = {
-                'x': xmax - xmin,
-                'y': ymax - ymin,
-                'z': zmax - zmin,
+                'x': abs(xmax - xmin),
+                'y': abs(ymax - ymin),
+                'z': abs(zmax - zmin),
             }
 
             # Projected area (XY plane)
@@ -118,12 +150,115 @@ def process_step_file(file_content: bytes) -> Dict[str, Any]:
                 "thickness_distribution": thickness.get('distribution', []),
             }
         finally:
-            os.unlink(temp_path)
+            # Always cleanup temp file
+            try:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            except:
+                pass
 
-    except ImportError:
-        raise RuntimeError("STEP file support requires cadquery. Install with: pip install cadquery")
+    except ImportError as e:
+        raise RuntimeError(f"CadQuery not available: {str(e)}. STEP support requires: pip install cadquery")
     except Exception as e:
-        raise RuntimeError(f"Failed to process STEP file: {str(e)}")
+        raise RuntimeError(f"CadQuery processing failed: {str(e)}")
+
+
+def _process_step_simple_fallback(file_content: bytes) -> Dict[str, Any]:
+    """
+    Simple STEP file parsing fallback.
+    Extracts basic geometry from STEP text format.
+    """
+    try:
+        # Decode STEP file (it's text format)
+        step_text = file_content.decode('utf-8', errors='ignore')
+
+        # Extract bounding box from STEP geometric data
+        # STEP files contain coordinate data we can parse
+        import re
+
+        # Find all coordinate values in the STEP file
+        # Pattern matches numbers in CARTESIAN_POINT definitions
+        coord_pattern = r'CARTESIAN_POINT\s*\([^)]*\)\s*,\s*\(([^)]+)\)'
+        matches = re.findall(coord_pattern, step_text)
+
+        if not matches:
+            # Try alternative pattern
+            coord_pattern = r'#\d+\s*=\s*CARTESIAN_POINT\s*\([^)]*,\s*\(([^)]+)\)'
+            matches = re.findall(coord_pattern, step_text)
+
+        if not matches:
+            raise ValueError("Could not extract coordinates from STEP file")
+
+        # Parse coordinates
+        all_coords = []
+        for match in matches:
+            coords = [float(x.strip()) for x in match.split(',') if x.strip()]
+            if len(coords) >= 3:
+                all_coords.append(coords[:3])
+
+        if len(all_coords) < 8:
+            raise ValueError(f"Insufficient coordinate data found: {len(all_coords)} points")
+
+        # Convert to numpy array
+        coords_array = np.array(all_coords)
+
+        # Calculate bounding box
+        min_coords = coords_array.min(axis=0)
+        max_coords = coords_array.max(axis=0)
+
+        bbox = {
+            'x': abs(max_coords[0] - min_coords[0]),
+            'y': abs(max_coords[1] - min_coords[1]),
+            'z': abs(max_coords[2] - min_coords[2]),
+        }
+
+        # Validate bounding box
+        if bbox['x'] <= 0 or bbox['y'] <= 0 or bbox['z'] <= 0:
+            raise ValueError(f"Invalid bounding box: {bbox}")
+
+        # Estimate volume (assumes roughly rectangular part)
+        # This is a rough approximation
+        volume_mm3 = bbox['x'] * bbox['y'] * bbox['z'] * 0.4  # 40% fill factor estimate
+        volume_cm3 = volume_mm3 / 1000
+
+        # Estimate surface area
+        surface_area_mm2 = 2 * (bbox['x'] * bbox['y'] + bbox['y'] * bbox['z'] + bbox['z'] * bbox['x'])
+        surface_area_cm2 = surface_area_mm2 / 100
+
+        # Projected area
+        projected_area_mm2 = bbox['x'] * bbox['y']
+        projected_area_cm2 = projected_area_mm2 / 100
+
+        # Estimate thickness
+        avg_thickness = min(bbox['x'], bbox['y'], bbox['z']) * 0.2  # Rough estimate
+        thickness = {
+            'min': avg_thickness * 0.6,
+            'avg': avg_thickness,
+            'max': avg_thickness * 1.8,
+            'distribution': generate_thickness_distribution(
+                avg_thickness * 0.6,
+                avg_thickness,
+                avg_thickness * 1.8
+            )
+        }
+
+        return {
+            "volume_cm3": round(volume_cm3, 3),
+            "surface_area_cm2": round(surface_area_cm2, 2),
+            "projected_area_cm2": round(projected_area_cm2, 2),
+            "bbox_x": round(bbox['x'], 2),
+            "bbox_y": round(bbox['y'], 2),
+            "bbox_z": round(bbox['z'], 2),
+            "max_thickness": round(thickness['max'], 2),
+            "min_thickness": round(thickness['min'], 2),
+            "avg_thickness": round(thickness['avg'], 2),
+            "thickness_distribution": thickness.get('distribution', []),
+            "note": "Estimated from STEP bounding box (simplified parsing)"
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"Simple STEP parsing failed: {str(e)}")
+
 
 
 def calculate_volume(stl_mesh) -> float:
