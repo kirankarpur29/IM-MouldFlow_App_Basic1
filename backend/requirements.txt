@@ -18,7 +18,13 @@ httpx==0.25.2
 pytest==7.4.3
 pytest-asyncio==0.21.1
 
-# STEP file support (optional - heavy dependencies)
-# cadquery==2.4.0  # Commented out - too heavy for cloud deployment
-# For STEP support, we use lightweight text parsing instead
+# Accurate 3D geometry processing
+trimesh==4.0.5  # Main library for STEP/STL parsing and geometry analysis
+rtree==1.1.0  # Spatial indexing for trimesh
+shapely==2.0.2  # Geometric operations
+networkx==3.2.1  # Graph algorithms for topology analysis
+
+# Optional CAD import (lighter than cadquery)
+# Uses Open CASCADE bindings for STEP support
+pythonOCC-core==7.7.2  # For STEP file import (lighter alternative)
 
